@@ -14,6 +14,23 @@ import torch
 
 from ultralytics.utils import LOGGER, DataExportMixin, SimpleClass, TryExcept, checks, plt_settings
 
+# fix chinese show
+import matplotlib.pyplot as plt
+import matplotlib.font_manager as fm
+from ultralytics.utils import WINDOWS, LINUX, MACOS, platform
+
+plt.rcParams['axes.unicode_minus'] = False  # fix negative num showing issue
+for font_file in fm.findSystemFonts(fontpaths=None, fontext="ttf"):
+    fm.fontManager.addfont(font_file)
+if WINDOWS:
+    plt.rcParams["font.sans-serif"] = ["SimHei"] + plt.rcParams.get("font.sans-serif", [])  # Win
+elif MACOS:
+    plt.rcParams["font.sans-serif"] = ["Heiti TC"] + plt.rcParams.get("font.sans-serif", [])  # macOS
+elif LINUX:
+    plt.rcParams["font.sans-serif"] = ["Noto Sans CJK SC"] + plt.rcParams.get("font.sans-serif", [])  # Linux
+else:
+    warnings.warn(f"matplotlib chinese plot issue compatibility warning, platform <{platform.system()}> unknown.")
+
 OKS_SIGMA = (
     np.array([0.26, 0.25, 0.25, 0.35, 0.35, 0.79, 0.79, 0.72, 0.72, 0.62, 0.62, 1.07, 1.07, 0.87, 0.87, 0.89, 0.89])
     / 10.0
