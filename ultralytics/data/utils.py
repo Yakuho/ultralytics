@@ -8,6 +8,7 @@ import random
 import subprocess
 import time
 import zipfile
+import warnings
 from multiprocessing.pool import ThreadPool
 from pathlib import Path
 from tarfile import is_tarfile
@@ -42,10 +43,12 @@ VID_FORMATS = {"asf", "avi", "gif", "m4v", "mkv", "mov", "mp4", "mpeg", "mpg", "
 FORMATS_HELP_MSG = f"Supported formats are:\nimages: {IMG_FORMATS}\nvideos: {VID_FORMATS}"
 
 
-def img2label_paths(img_paths: list[str]) -> list[str]:
-    """Convert image paths to label paths by replacing 'images' with 'labels' and extension with '.txt'."""
+def img2label_paths(img_paths: list[str], ext=".txt") -> list[str]:
+    """Convert image paths to label paths by replacing 'images' with 'labels'(default) or 'images' and
+        extension with '.txt', '.json', ... by setting argument {ext}."""
     sa, sb = f"{os.sep}images{os.sep}", f"{os.sep}labels{os.sep}"  # /images/, /labels/ substrings
-    return [sb.join(x.rsplit(sa, 1)).rsplit(".", 1)[0] + ".txt" for x in img_paths]
+    return [lp if os.path.exists(lp := sb.join(x.rsplit(sa, 1)).rsplit(".", 1)[0] + ext) else
+            x.rsplit(".", 1)[0] + ext for x in img_paths]
 
 
 def check_file_speeds(
@@ -178,8 +181,19 @@ def verify_image(args: tuple) -> tuple:
     return (im_file, cls), nf, nc, msg
 
 
-def verify_image_label(args: tuple) -> list:
-    """Verify one image-label pair."""
+def verify_image_label(args: tuple, fmt="YOLO", names: dict=None, name_error="warn") -> list:
+    """
+    Verify one image-label pair.
+
+    Args:
+        args: (im_file, lb_file, prefix, keypoint, num_cls, nkpt, ndim, single_cls)
+        fmt: dataset format: YOLO(default), labelme, ...
+        names: label to index(number label) mapping.
+        name_error: method when label not found from names mapping. method support ["skip", "warn"]
+
+    Returns:
+        (im_file, lb, shape, segments, keypoints, nmiss, nfound, nempty, ncorrupt, msg)
+    """
     im_file, lb_file, prefix, keypoint, num_cls, nkpt, ndim, single_cls = args
     # Number (missing, found, empty, corrupt), message, segments, keypoints
     nm, nf, ne, nc, msg, segments, keypoints = 0, 0, 0, 0, "", [], None
@@ -202,7 +216,19 @@ def verify_image_label(args: tuple) -> list:
         if os.path.isfile(lb_file):
             nf = 1  # label found
             with open(lb_file, encoding="utf-8") as f:
-                lb = [x.split() for x in f.read().strip().splitlines() if len(x)]
+                if fmt == "YOLO":
+                    lb = [x.split() for x in f.read().strip().splitlines() if len(x)]
+                elif fmt == "labelme":
+                    # TODO: maybe not enough compatibility for: classify, obb, pose, world, only support: detect, segment
+                    assert names is not None, "label format labelme must set names like: {\"label-1\": 0, ...}"
+                    lb = []
+                    for item in json.load(f)["shapes"]:
+                        if label := names.get(item["label"]):
+                            lb.append([label] + [v / s for xy in item["points"] for v, s in zip(xy, shape[::-1])])
+                        elif label is None and name_error in ("warn", "warning"):
+                            warnings.warn(f"label <{label}> skipped due to not found in names mapping.")
+                else:
+                    raise ValueError(f"label format <{fmt}> unsupported, from {lb_file}")
                 if any(len(x) > 6 for x in lb) and (not keypoint):  # is segment
                     classes = np.array([x[0] for x in lb], dtype=np.float32)
                     segments = [np.array(x[1:], dtype=np.float32).reshape(-1, 2) for x in lb]  # (cls, xy1...)

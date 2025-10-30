@@ -89,6 +89,14 @@ class YOLODataset(BaseDataset):
         assert not (self.use_segments and self.use_keypoints), "Can not use both segments and keypoints."
         super().__init__(*args, channels=self.data.get("channels", 3), **kwargs)
 
+    def img2label_paths(self, img_paths: list[str]) -> list[str]:
+        """set default img2label_paths function arguments."""
+        return img2label_paths(img_paths, ext=".txt")
+
+    def verify_image_label(self, args: tuple) -> list:
+        """set default verify_image_label function arguments."""
+        return verify_image_label(args, fmt="YOLO", names=None, name_error="warn")
+
     def cache_labels(self, path: Path = Path("./labels.cache")) -> dict:
         """
         Cache dataset labels, check images and read shapes.
@@ -111,7 +119,7 @@ class YOLODataset(BaseDataset):
             )
         with ThreadPool(NUM_THREADS) as pool:
             results = pool.imap(
-                func=verify_image_label,
+                func=self.verify_image_label,
                 iterable=zip(
                     self.im_files,
                     self.label_files,
@@ -166,7 +174,7 @@ class YOLODataset(BaseDataset):
         Returns:
             (list[dict]): List of label dictionaries, each containing information about an image and its annotations.
         """
-        self.label_files = img2label_paths(self.im_files)
+        self.label_files = self.img2label_paths(self.im_files)
         cache_path = Path(self.label_files[0]).parent.with_suffix(".cache")
         try:
             cache, exists = load_dataset_cache_file(cache_path), True  # attempt to load a *.cache file
@@ -860,3 +868,15 @@ class ClassificationDataset:
             x["msgs"] = msgs  # warnings
             save_dataset_cache_file(self.prefix, path, x, DATASET_CACHE_VERSION)
             return samples
+
+
+class LabelmeDataset(YOLODataset):
+    """labelme dataset."""
+    def img2label_paths(self, img_paths: list[str]) -> list[str]:
+        """set label file format to json"""
+        return img2label_paths(img_paths, ext=".json")
+
+    def verify_image_label(self, args: tuple) -> list:
+        """set label to index(num label) mapping"""
+        names = {v: k for k, v in self.data["names"].items()}
+        return verify_image_label(args, fmt="labelme", names=names)

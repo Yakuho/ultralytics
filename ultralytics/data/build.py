@@ -18,6 +18,7 @@ from torch.utils.data import dataloader, distributed
 
 from ultralytics.cfg import IterableSimpleNamespace
 from ultralytics.data.dataset import GroundingDataset, YOLODataset, YOLOMultiModalDataset
+from ultralytics.data.dataset import LabelmeDataset
 from ultralytics.data.loaders import (
     LOADERS,
     LoadImagesAndVideos,
@@ -229,7 +230,13 @@ def build_yolo_dataset(
     multi_modal: bool = False,
 ):
     """Build and return a YOLO dataset based on configuration parameters."""
-    dataset = YOLOMultiModalDataset if multi_modal else YOLODataset
+    if "data_type" in data.keys():
+        if data["data_type"] == "Labelme":
+            dataset = LabelmeDataset
+        else:
+            raise ValueError(f"dataset type <{data['data_type']}> unsupported")
+    else:
+        dataset = YOLOMultiModalDataset if multi_modal else YOLODataset
     return dataset(
         img_path=img_path,
         imgsz=cfg.imgsz,
