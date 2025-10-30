@@ -1,0 +1,18 @@
+## Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
+
+# Example usage: yolo train data=AIJELabelme-seg.yaml
+# parent
+# ├── ultralytics
+# └── datasets
+#     └── AIJELabelme  ← dataset put here
+
+# Train/val/test sets as 1) dir: path/to/imgs, 2) file: path/to/imgs.txt, or 3) list: [path/to/imgs1, path/to/imgs2, ..]
+check: True # if set False，the image have only background also will be training; if set True, the image have only background will be dropping.
+data_type: AIJELabelme # dataset type format
+path: AIJELabelme # dataset root dir
+train: train/images # train images (relative to 'path')
+val: val/images # val images (relative to 'path')
+test: # test images (optional)
+
+# Classes
+names: ["person", "cat", "dog", "..."]

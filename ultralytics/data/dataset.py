@@ -880,3 +880,25 @@ class LabelmeDataset(YOLODataset):
         """set label to index(num label) mapping"""
         names = {v: k for k, v in self.data["names"].items()}
         return verify_image_label(args, fmt="labelme", names=names)
+
+
+class AIJELabelmeDataset(LabelmeDataset):
+    """AIJELabelme dataset."""
+    def verify_image_label(self, args: tuple) -> list:
+        """set label to index(num label) mapping"""
+        names = {i: k for k, v in self.data["names"].items() for i in v.split(',')}
+        return verify_image_label(args, fmt="labelme", names=names, name_error="skip")
+
+    def get_labels(self) -> list[dict]:
+        """override get_labels function to suit argument: self.data["check"] = True, for skip no label images"""
+        labels = super().get_labels()
+        if self.data["check"]:
+            # TODO: only support check for task Detect, Segment.
+            idx = [i for i, item in enumerate(labels)
+                   if (isinstance(item["cls"], (list, np.ndarray)) and len(item["cls"]) > 0) and
+                   ((isinstance(item["segments"], list) and len(item["segments"]) > 0) if self.use_segments else True)]
+            if len(idx) != len(labels):
+                labels = [labels[i] for i in idx]
+                self.im_files = [self.im_files[i] for i in idx]
+                self.label_files = [self.label_files[i] for i in idx]
+        return labels
