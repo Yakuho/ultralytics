@@ -7,7 +7,7 @@ import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, Union
 
 from ultralytics import __version__
 from ultralytics.utils import (
@@ -827,7 +827,7 @@ def smart_value(v: str) -> Any:
             return v
 
 
-def entrypoint(debug: str = "") -> None:
+def entrypoint(debug: str = "", later=False) -> Union[None, tuple[object, dict]]:
     """
     Ultralytics entrypoint function for parsing and executing command-line arguments.
 
@@ -836,6 +836,7 @@ def entrypoint(debug: str = "") -> None:
 
     Args:
         debug (str): Space-separated string of command-line arguments for debugging purposes.
+        later (bool): Not run task immediately, otherwise return model and args
 
     Examples:
         Train a detection model for 10 epochs with an initial learning_rate of 0.01:
@@ -989,6 +990,8 @@ def entrypoint(debug: str = "") -> None:
             LOGGER.warning(f"'format' argument is missing. Using default 'format={overrides['format']}'.")
 
     # Run command in python
+    if later:
+        return model, overrides
     getattr(model, mode)(**overrides)  # default args from model
 
     # Show help
@@ -997,6 +1000,8 @@ def entrypoint(debug: str = "") -> None:
     # Recommend VS Code extension
     if IS_VSCODE and SETTINGS.get("vscode_msg", True):
         LOGGER.info(vscode_msg())
+
+    return None
 
 
 # Special modes --------------------------------------------------------------------------------------------------------
