@@ -814,7 +814,7 @@ def smart_value(v: str) -> Any:
             return v
 
 
-def entrypoint(debug: str = "", later=False) -> None:
+def entrypoint(debug: str = "", later=False) -> Union[tuple[object, dict], None]:
     """Ultralytics entrypoint function for parsing and executing command-line arguments.
 
     This function serves as the main entry point for the Ultralytics CLI, parsing command-line arguments and executing
