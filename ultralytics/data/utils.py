@@ -223,7 +223,7 @@ def verify_image_label(args: tuple, fmt="YOLO", names: dict=None, name_error="wa
                     lb = []
                     for item in json.load(f)["shapes"]:
                         if label := names.get(item["label"]):
-                            lb.append([label] + [v / s for xy in item["points"] for v, s in zip(xy, shape[::-1])])
+                            lb.append([label] + [np.clip(v / s, 0, 1) for xy in item["points"] for v, s in zip(xy, shape[::-1])])
                         elif label is None and name_error in ("warn", "warning"):
                             warnings.warn(f"label <{label}> skipped due to not found in names mapping.")
                 else:
