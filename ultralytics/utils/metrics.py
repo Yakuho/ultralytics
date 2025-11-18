@@ -19,17 +19,23 @@ import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
 from ultralytics.utils import WINDOWS, LINUX, MACOS, platform
 
+fonts, font = [], None
 plt.rcParams['axes.unicode_minus'] = False  # fix negative num showing issue
-for font_file in fm.findSystemFonts(fontpaths=None, fontext="ttf"):
+for font_file in fm.findSystemFonts(fontpaths=None):
+    fn = fm.FontProperties(fname=font_file).get_name()
     fm.fontManager.addfont(font_file)
+    if fn not in fonts:
+        fonts.append(fn)
 if WINDOWS:
-    plt.rcParams["font.sans-serif"] = ["SimHei"] + plt.rcParams.get("font.sans-serif", [])  # Win
+    font = "SimHei"
 elif MACOS:
-    plt.rcParams["font.sans-serif"] = ["Heiti TC"] + plt.rcParams.get("font.sans-serif", [])  # macOS
+    font = "Heiti TC"
 elif LINUX:
-    plt.rcParams["font.sans-serif"] = ["Noto Sans CJK SC"] + plt.rcParams.get("font.sans-serif", [])  # Linux
+    font = "Noto Sans CJK SC"
 else:
     warnings.warn(f"matplotlib chinese plot issue compatibility warning, platform <{platform.system()}> unknown.")
+if font and font not in fonts:
+    plt.rcParams["font.sans-serif"] = [font] + fonts
 
 OKS_SIGMA = (
     np.array([0.26, 0.25, 0.25, 0.35, 0.35, 0.79, 0.79, 0.72, 0.72, 0.62, 0.62, 1.07, 1.07, 0.87, 0.87, 0.89, 0.89])
