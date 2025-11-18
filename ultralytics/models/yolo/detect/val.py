@@ -13,6 +13,7 @@ import torch.distributed as dist
 from ultralytics.data import build_dataloader, build_yolo_dataset, converter
 from ultralytics.engine.validator import BaseValidator
 from ultralytics.utils import LOGGER, RANK, nms, ops
+from ultralytics.utils.logger import smartFmtName
 from ultralytics.utils.checks import check_requirements
 from ultralytics.utils.metrics import ConfusionMatrix, DetMetrics, box_iou
 from ultralytics.utils.plotting import plot_images
@@ -261,15 +262,14 @@ class DetectionValidator(BaseValidator):
         # Print results per class
         if self.args.verbose and not self.training and self.nc > 1 and len(self.metrics.stats):
             for i, c in enumerate(self.metrics.ap_class_index):
-                LOGGER.info(
-                    pf
-                    % (
+                LOGGER.info(smartFmtName(
+                    pf, *(
                         self.names[c],
                         self.metrics.nt_per_image[c],
                         self.metrics.nt_per_class[c],
                         *self.metrics.class_result(i),
                     )
-                )
+                ))
 
     def _process_batch(self, preds: dict[str, torch.Tensor], batch: dict[str, Any]) -> dict[str, np.ndarray]:
         """Return correct prediction matrix.

@@ -6,6 +6,7 @@ import shutil
 import sys
 import threading
 import time
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -361,6 +362,28 @@ class SystemLogger:
         except Exception:
             pass
         return gpus
+
+
+def smartFmtName(fmt: str, *args):
+    """smart format from unicode and english to yolo print results."""
+    pattern = r"%(?P<flags>[-+0 #]*)?(?P<width>\d+)?(?:\.(?P<precision>\d+))?(?P<type>[a-zA-Z])"
+    fmt1st = re.match(pattern, fmt)
+    if fmt1st and fmt1st.group("type") == 's':
+        label = str(args[0])
+        width = int(fmt1st.group("width")) if fmt1st.group("width") else None
+        length = sum(2 if ord(ch) > 127 else 1 for ch in label)
+        if isinstance(width, int):
+            if length > width:
+                while length + 3 > width:
+                    length -= 2 if ord(label[-1]) > 127 else 1
+                    label = label[:-1]
+                else:
+                    length += 3
+                    label += "..."
+            return " " * (width - length) + label + fmt[fmt1st.lastindex:] % args[1:]
+        return fmt % args
+    else:
+        return fmt % args
 
 
 if __name__ == "__main__":
