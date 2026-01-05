@@ -825,7 +825,7 @@ class ClassificationDataset:
         Returns:
             (list): List of valid samples after verification.
         """
-        desc = f"{self.prefix}Scanning {self.root}..."
+        desc = f"{self.prefix}Scanning {'all subdataset' if len(self.root) > 1 else self.root[0]}..."
         path = Path(self.root[0]).with_suffix(".cache")  # *.cache file path
 
         try:
