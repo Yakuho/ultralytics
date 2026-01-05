@@ -1040,7 +1040,7 @@ class RandomPerspective:
         Args:
             degrees (float): Degree range for random rotations.
             translate (float): Fraction of total width and height for random translation.
-            scale (float): Scaling factor interval, e.g., a scale factor of 0.5 allows a resize between 50%-150%.
+            scale (float, int, tuple, list): Scaling factor interval, e.g., a scale factor of 0.5 allows a resize between 50%-150%.
             shear (float): Shear intensity (angle in degrees).
             perspective (float): Perspective distortion factor.
             border (tuple[int, int]): Tuple specifying mosaic border (top/bottom, left/right).
@@ -1092,7 +1092,7 @@ class RandomPerspective:
         R = np.eye(3, dtype=np.float32)
         a = random.uniform(-self.degrees, self.degrees)
         # a += random.choice([-180, -90, 0, 90])  # add 90deg rotations to small rotations
-        s = random.uniform(1 - self.scale, 1 + self.scale)
+        s = random.uniform(*((1 - self.scale, 1 + self.scale) if isinstance(self.scale, (float, int)) else self.scale))
         # s = 2 ** random.uniform(-scale, scale)
         R[:2] = cv2.getRotationMatrix2D(angle=a, center=(0, 0), scale=s)
 

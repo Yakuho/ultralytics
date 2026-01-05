@@ -148,6 +148,9 @@ CLI_HELP_MSG = f"""
     """
 
 # Define keys for arg type checks
+CFG_SPECIAL_KEYS = {  # union type arguments, i.e. x=[0, 1], x=(0, 1), x=1.0 and x=1
+    "scale": (list, tuple, float, int)
+}
 CFG_FLOAT_KEYS = frozenset(
     {  # integer or float arguments, i.e. x=2 and x=2.0
         "warmup_epochs",
@@ -174,7 +177,6 @@ CFG_FRACTION_KEYS = frozenset(
         "hsv_s",
         "hsv_v",
         "translate",
-        "scale",
         "perspective",
         "flipud",
         "fliplr",
@@ -384,6 +386,11 @@ def check_cfg(cfg: dict, hard: bool = True) -> None:
                         f"'{k}' must be a bool (i.e. '{k}=True' or '{k}=False')"
                     )
                 cfg[k] = bool(v)
+            elif k in CFG_SPECIAL_KEYS and not isinstance(v, CFG_SPECIAL_KEYS[k]):
+                raise TypeError(
+                    f"'{k}={v}' is of invalid type {type(v).__name__}. "
+                    f"'{k}' must include Types: ({', '.join([i.__name__ for i in CFG_SPECIAL_KEYS[k]])})"
+                )
 
 
 def get_save_dir(args: SimpleNamespace, name: str | None = None) -> Path:
