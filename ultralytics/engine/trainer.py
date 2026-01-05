@@ -25,7 +25,7 @@ from torch import nn, optim
 
 from ultralytics import __version__
 from ultralytics.cfg import get_cfg, get_save_dir
-from ultralytics.data.utils import check_cls_dataset, check_det_dataset
+from ultralytics.data.utils import check_cls_dataset_from_yaml, check_cls_dataset, check_det_dataset
 from ultralytics.nn.tasks import load_checkpoint
 from ultralytics.utils import (
     DEFAULT_CFG,
@@ -630,7 +630,10 @@ class BaseTrainer:
         """
         try:
             if self.args.task == "classify":
-                data = check_cls_dataset(self.args.data)
+                if self.args.data.endswith(".yaml"):
+                    data = check_cls_dataset_from_yaml(self.args.data)
+                else:
+                    data = check_cls_dataset(self.args.data)
             elif str(self.args.data).rsplit(".", 1)[-1] == "ndjson":
                 # Convert NDJSON to YOLO format
                 import asyncio

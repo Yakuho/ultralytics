@@ -717,8 +717,9 @@ class ClassificationDataset:
         verify_images: Verify all images in dataset.
     """
 
-    def __init__(self, root: str, args, augment: bool = False, prefix: str = ""):
+    def __init__(self, root: str, args, augment: bool = False, prefix: str = "", names: dict = None):
         """Initialize YOLO classification dataset with root directory, arguments, augmentations, and cache settings.
+        config example: ultralytics/cfg/datasets/YOLO-mutil-subdataset-cls.yaml
 
         Args:
             root (str): Path to the dataset directory where images are stored in a class-specific folder structure.
@@ -726,20 +727,42 @@ class ClassificationDataset:
                 parameters, and cache settings.
             augment (bool, optional): Whether to apply augmentations to the dataset.
             prefix (str, optional): Prefix for logging and cache filenames, aiding in dataset identification.
+            names (dict): names mapping for mutil-subdataset.
         """
         import torchvision  # scope for faster 'import ultralytics'
 
+        if not isinstance(root, (list, tuple)):
+            root = [root]
+
         # Base class assigned as attribute rather than used as base class to allow for scoping slow torchvision import
         if TORCHVISION_0_18:  # 'allow_empty' argument first introduced in torchvision 0.18
-            self.base = torchvision.datasets.ImageFolder(root=root, allow_empty=True)
+            self.base = [torchvision.datasets.ImageFolder(root=r, allow_empty=True) for r in root]
         else:
-            self.base = torchvision.datasets.ImageFolder(root=root)
-        self.samples = self.base.samples
-        self.root = self.base.root
+            self.base = [torchvision.datasets.ImageFolder(root=r) for r in root]
+
+        if len(root) > 1:  # subdataset relabel check
+            if names is None or not isinstance(names, dict):
+                raise ValueError("Classification sends mutil-subdataset must set arg:names in yaml.")
+            names_map = {v: k for k, v in names.items()}
+            for subbase in self.base:
+                imgs, targets = [], []
+                for f, i in subbase.samples:
+                    trans_idx = names_map.get(subbase.classes[i], None)
+                    if trans_idx is not None:
+                        imgs.append(f)
+                        targets.append(trans_idx)
+                subbase.class_to_idx = dict(sorted(names_map.items(), key=lambda x: x[1]))
+                subbase.classes = list(names.values())
+                subbase.imgs = imgs
+                subbase.samples = list(zip(imgs, targets))
+                subbase.targets = targets
+
+        self.samples = [b.samples for b in self.base]
+        self.root = [b.root for b in self.base]
 
         # Initialize attributes
         if augment and args.fraction < 1.0:  # reduce training fraction
-            self.samples = self.samples[: round(len(self.samples) * args.fraction)]
+            self.samples = [s[: round(len(s) * args.fraction)] for s in self.samples]
         self.prefix = colorstr(f"{prefix}: ") if prefix else ""
         self.cache_ram = args.cache is True or str(args.cache).lower() == "ram"  # cache images into RAM
         if self.cache_ram:
@@ -751,7 +774,7 @@ class ClassificationDataset:
         self.cache_disk = str(args.cache).lower() == "disk"  # cache images on hard drive as uncompressed *.npy files
         self.samples = self.verify_images()  # filter out bad images
         self.samples = [[*list(x), Path(x[0]).with_suffix(".npy"), None] for x in self.samples]  # file, index, npy, im
-        scale = (1.0 - args.scale, 1.0)  # (0.08, 1.0)
+        scale = (1.0 - args.scale, 1.0) if isinstance(args.scale, (float, int)) else tuple(args.scale)
         self.torch_transforms = (
             classify_augmentations(
                 size=args.imgsz,
@@ -803,13 +826,13 @@ class ClassificationDataset:
             (list): List of valid samples after verification.
         """
         desc = f"{self.prefix}Scanning {self.root}..."
-        path = Path(self.root).with_suffix(".cache")  # *.cache file path
+        path = Path(self.root[0]).with_suffix(".cache")  # *.cache file path
 
         try:
-            check_file_speeds([file for (file, _) in self.samples[:5]], prefix=self.prefix)  # check image read speeds
+            check_file_speeds([file for (file, _) in self.samples[0][:5]], prefix=self.prefix)  # check image read speeds
             cache = load_dataset_cache_file(path)  # attempt to load a *.cache file
             assert cache["version"] == DATASET_CACHE_VERSION  # matches current version
-            assert cache["hash"] == get_hash([x[0] for x in self.samples])  # identical hash
+            assert cache["hash"] == get_hash([x[0] for s in self.samples for x in s])  # identical hash
             nf, nc, n, samples = cache.pop("results")  # found, missing, empty, corrupt, total
             if LOCAL_RANK in {-1, 0}:
                 d = f"{desc} {nf} images, {nc} corrupt"
@@ -822,8 +845,9 @@ class ClassificationDataset:
             # Run scan if *.cache retrieval failed
             nf, nc, msgs, samples, x = 0, 0, [], [], {}
             with ThreadPool(NUM_THREADS) as pool:
-                results = pool.imap(func=verify_image, iterable=zip(self.samples, repeat(self.prefix)))
-                pbar = TQDM(results, desc=desc, total=len(self.samples))
+                results = pool.imap(func=verify_image, iterable=zip(
+                    (x for s in self.samples for x in s), repeat(self.prefix)))
+                pbar = TQDM(results, desc=desc, total=sum(len(s) for s in self.samples))
                 for sample, nf_f, nc_f, msg in pbar:
                     if nf_f:
                         samples.append(sample)
@@ -835,7 +859,7 @@ class ClassificationDataset:
                 pbar.close()
             if msgs:
                 LOGGER.info("\n".join(msgs))
-            x["hash"] = get_hash([x[0] for x in self.samples])
+            x["hash"] = get_hash([x[0] for s in self.samples for x in s])
             x["results"] = nf, nc, len(samples), samples
             x["msgs"] = msgs  # warnings
             save_dataset_cache_file(self.prefix, path, x, DATASET_CACHE_VERSION)

@@ -16,6 +16,7 @@ from typing import Any
 
 import cv2
 import numpy as np
+import yaml
 from PIL import Image, ImageOps
 
 from ultralytics.nn.autobackend import check_class_names
@@ -534,8 +535,8 @@ def check_cls_dataset(dataset: str | Path, split: str = "") -> dict[str, Any]:
     if not data_dir.is_dir():
         if data_dir.suffix != "":
             raise ValueError(
-                f'Classification datasets must be a directory (data="path/to/dir") not a file (data="{dataset}"), '
-                "See https://docs.ultralytics.com/datasets/classify/"
+                f'Classification datasets must be a directory (data="path/to/dir" or data="path/to/file.yaml") '
+                f'not a file/path (data="{dataset}"), See https://docs.ultralytics.com/datasets/classify/'
             )
         LOGGER.info("")
         LOGGER.warning(f"Dataset not found, missing path {data_dir}, attempting download...")
@@ -595,6 +596,89 @@ def check_cls_dataset(dataset: str | Path, split: str = "") -> dict[str, Any]:
                 LOGGER.error(f"{prefix} found {nf} images in {nd} classes (requires {nc} classes, not {nd})")
             else:
                 LOGGER.info(f"{prefix} found {nf} images in {nd} classes ✅ ")
+
+    return {"train": train_set, "val": val_set, "test": test_set, "nc": nc, "names": names, "channels": 3}
+
+
+def check_cls_dataset_from_yaml(dataset: str | Path, split: str = "") -> dict[str, Any]:
+    """Check a classification dataset such as Imagenet by yaml config.
+
+    This function accepts a `dataset.yaml` and attempts to retrieve the corresponding dataset information.
+
+    Args:
+        dataset (str | Path): The name config yaml of the dataset.
+        split (str, optional): The split of the dataset. Either 'val', 'test', or ''.
+
+    Returns:
+        (dict[str, Any]): A dictionary containing the following keys:
+
+            - 'train' (Path): The directory path containing the training set of the dataset.
+            - 'val' (Path): The directory path containing the validation set of the dataset.
+            - 'test' (Path): The directory path containing the test set of the dataset.
+            - 'nc' (int): The number of classes in the dataset.
+            - 'names' (dict[int, str]): A dictionary of class names in the dataset.
+    """
+    dataset = Path(dataset)
+    if not dataset.exists():
+        raise ValueError(f'Classification datasets (data="{dataset}") not found')
+    with open(dataset, encoding="utf-8") as f:
+        data = yaml.safe_load(f)
+    dataset_p = Path(data.get("path", ""))
+    train_set = data.get("train", "")
+    test_set = data.get("test", "")  # data/val or data/test
+    val_set = (
+        data.get("val", "")
+        if data.get("val", "")
+        else data.get("validation", "")
+        if data.get("validation", "")
+        else data.get("valid", "")
+        if data.get("valid", "")
+        else None
+    )
+    train_set = [dataset_p / p for p in ([train_set] if isinstance(train_set, str) else train_set)]
+    test_set = [dataset_p / p for p in ([test_set] if isinstance(test_set, str) else test_set)] if test_set else []
+    val_set = [dataset_p / p for p in ([val_set] if isinstance(val_set, str) else val_set)] if val_set else []
+    if split == "val" and not val_set:
+        LOGGER.warning("Dataset 'split=val' not found, using 'split=test' instead.")
+        val_set = test_set
+    elif split == "test" and not test_set:
+        LOGGER.warning("Dataset 'split=test' not found, using 'split=val' instead.")
+        test_set = val_set
+
+    if data.get("names"):
+        names = data["names"]
+        assert isinstance(names, (tuple, list, dict)), f"Dataset (type(names)={type(names)}) only support list or dict."
+        nc = len(data["names"])
+        if isinstance(names, list):
+            names = {i: label for i, label_split in enumerate(names) for label in label_split.split(',')}
+    else:
+        names = list(set(n.name for sf in train_set if sf.is_dir() for n in sf.glob("*")))  # sub-folder
+        nc = len(set(n.name for sf in train_set if sf.is_dir() for n in sf.iterdir()))
+        names = dict(enumerate(sorted(names)))
+
+    for k, v in {"train": train_set, "val": val_set, "test": test_set}.items():
+        if len(v) == 0:
+            LOGGER.info(f"{colorstr(f'{k}:')} empty...")
+        else:
+            sublabels, subnf = set(), 0
+            for subfolder in v:
+                prefix = f"{colorstr(f'{k}:')} {subfolder}..."
+                files = [path for l in subfolder.iterdir() if l.name in names.values()
+                         for path in l.glob("*") if path.suffix[1:].lower() in IMG_FORMATS]
+                nf = len(files)  # number of files
+                subnf += nf
+                sublabels |= {file.parent.name for file in files}
+                if nf == 0:
+                    if k == "train":
+                        raise FileNotFoundError(f"{dataset} '{k}: {subfolder}' no training images found")
+                    else:
+                        LOGGER.warning(f"{prefix} found 0 images in 0 classes (no images found)")
+            nd = len(sublabels)
+            prefix = f"{colorstr(f'{k}:')} {f'all ({len(v)}) subfolder' if len(v) > 1 else v[0]}..."
+            if len(sublabels) != nc and k == "train":
+                LOGGER.error(f"{prefix} found {subnf} images in {nd} classes (requires {nc} classes, not {nd})")
+            else:
+                LOGGER.info(f"{prefix} found {subnf} images in {nd} classes ✅ ")
 
     return {"train": train_set, "val": val_set, "test": test_set, "nc": nc, "names": names, "channels": 3}
 
