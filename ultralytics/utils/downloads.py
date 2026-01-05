@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess
@@ -11,6 +12,7 @@ from pathlib import Path
 from urllib import parse, request
 
 from ultralytics.utils import ASSETS_URL, LOGGER, TQDM, checks, clean_url, emojis, is_online, url2file
+from ultralytics.utils import LINUX, WINDOWS, MACOS
 
 # Define Ultralytics GitHub assets maintained at https://github.com/ultralytics/assets
 GITHUB_ASSETS_REPO = "ultralytics/assets"
@@ -503,7 +505,7 @@ def download(
     Examples:
         >>> download("https://ultralytics.com/assets/example.zip", dir="path/to/dir", unzip=True)
     """
-    dir = Path(dir)
+    dir = Path(dir).expanduser()
     dir.mkdir(parents=True, exist_ok=True)  # make directory
     urls = [url] if isinstance(url, (str, Path)) else url
     if threads > 1:
@@ -527,3 +529,49 @@ def download(
     else:
         for u in urls:
             safe_download(url=u, dir=dir, unzip=unzip, delete=delete, curl=curl, retry=retry, exist_ok=exist_ok)
+
+
+def check_permission(path):
+    """检查 path 或其最近存在的父目录是否可写"""
+    cur = os.path.expanduser(path)
+    while not os.path.exists(cur):
+        parent = os.path.dirname(cur)
+        if parent == cur:
+            return False
+        cur = parent
+    return os.access(cur, os.W_OK)
+
+
+def check_download_chinese_font(name: str):
+    """Auto check font files and download files from web."""
+    font_urls = {
+        "SimHei": {
+            "file": "https://media.fontsgeek.com/download/zip/s/i/simhei-regular_fVBwF.zip"
+        },
+        "Noto Sans CJK SC": {
+            "urlbase": "https://raw.githubusercontent.com/notofonts/noto-cjk/refs/tags/v20201206-cjk/",
+            "files": (
+                "NotoSansCJKsc-Black.otf",
+                "NotoSansCJKsc-Bold.otf",
+                "NotoSansCJKsc-DemiLight.otf",
+                "NotoSansCJKsc-Light.otf",
+                "NotoSansCJKsc-Medium.otf",
+                "NotoSansCJKsc-Regular.otf",
+                "NotoSansCJKsc-Thin.otf",
+            )
+        }
+    }
+
+    if WINDOWS:
+        dst = ("C:/Windows/Fonts", "%LOCALAPPDATA%/Microsoft/Windows/Fonts")
+    elif LINUX:
+        url = [font_urls[name]["urlbase"] + file for file in font_urls[name]["files"]]
+        dst = ("/usr/share/fonts/truetype", "~/.local/share/fonts")
+        for path in dst:
+            if not check_permission(path):
+                continue
+            download(url, Path(path) / name)
+            break
+        else:
+            import warnings
+            warnings.warn(f"Can't not download font {name} files to {dst}")

@@ -17,7 +17,8 @@ from ultralytics.utils import LOGGER, DataExportMixin, SimpleClass, TryExcept, c
 # fix chinese show
 import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
-from ultralytics.utils import WINDOWS, LINUX, MACOS, platform
+from ultralytics.utils import WINDOWS, LINUX, platform
+from ultralytics.utils.downloads import check_download_chinese_font
 
 fonts, font = [], None
 plt.rcParams['axes.unicode_minus'] = False  # fix negative num showing issue
@@ -28,14 +29,16 @@ for font_file in fm.findSystemFonts(fontpaths=None):
         fonts.append(fn)
 if WINDOWS:
     font = "SimHei"
-elif MACOS:
-    font = "Heiti TC"
 elif LINUX:
     font = "Noto Sans CJK SC"
 else:
     warnings.warn(f"matplotlib chinese plot issue compatibility warning, platform <{platform.system()}> unknown.")
-if font and font not in fonts:
-    plt.rcParams["font.sans-serif"] = [font] + fonts
+if font:
+    if font not in fonts:
+        check_download_chinese_font(font)
+    else:
+        fonts.pop(fonts.index(font))
+plt.rcParams["font.sans-serif"] = [font] + fonts
 
 OKS_SIGMA = (
     np.array(
