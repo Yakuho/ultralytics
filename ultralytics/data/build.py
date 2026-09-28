@@ -25,6 +25,7 @@ from ultralytics.data.dataset import (
     SemanticDataset,
     YOLODataset,
     YOLOMultiModalDataset,
+    LabelMeJSONDataset,
 )
 from ultralytics.data.loaders import (
     LOADERS,
@@ -256,6 +257,11 @@ def build_yolo_dataset(
         if dataset is PolygonSemanticDataset:
             add_polygon_background(data)  # polygon labels need a background class; idempotent if already added
         pad = 0.0  # no pad for semantic
+    elif "format" in data.keys():
+        if data["format"] == "LabelMeJSON":
+            dataset = LabelMeJSONDataset
+        else:
+            raise ValueError(f"dataset type <{data['format']}> unsupported")
     elif multi_modal:
         dataset = YOLOMultiModalDataset
     else:

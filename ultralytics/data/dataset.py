@@ -6,6 +6,7 @@ import json
 from collections import defaultdict
 from itertools import repeat
 from multiprocessing.pool import ThreadPool
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -168,7 +169,7 @@ class YOLODataset(BaseDataset):
         Returns:
             (str): Dataset cache hash.
         """
-        scan_args = (self.use_keypoints, len(self.data["names"]), self.data.get("kpt_shape"), self.single_cls)
+        scan_args = (self.use_keypoints, self.data["names"], self.data.get("kpt_shape"), self.single_cls)
         return get_hash(self.label_files + self.im_files + [str(scan_args)])
 
     def scan_summary(self, nf: int, nm: int, ne: int, nc: int) -> str:
@@ -1322,3 +1323,25 @@ class ClassificationDataset:
             x["msgs"] = msgs  # warnings
             save_dataset_cache_file(self.prefix, path, x, DATASET_CACHE_VERSION)
             return samples
+
+
+# Extra dataset format supported
+class LabelMeJSONDataset(YOLODataset):
+    def get_label_files(self) -> list[str]:
+        """Return the companion label files for the dataset's images, storing them on the instance.
+
+        Returns:
+            (list[str]): List of label file paths.
+        """
+        self.label_files = img2label_paths(self.im_files, label_dir="images", suffix=".json")
+        return self.label_files
+
+    def verify_args(self) -> tuple:
+        """Return the per-image verification function and its argument iterable used by `cache_labels`.
+
+        Returns:
+            (tuple): (verify function, zipped argument iterable) for ThreadPool.imap.
+        """
+        func, iterable = super().verify_args()
+        names = {v: k for k, v in self.data["names"].items()}
+        return partial(func, fmt="LabelMeJSON", names=names), iterable

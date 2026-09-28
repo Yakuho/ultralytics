@@ -1,0 +1,31 @@
+## Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
+
+# LabelMe JSON dataset demo (user-provided images and annotations)
+# Detection: yolo detect train model=yolo26n.pt data=LabelMeJSON.yaml
+# Instance segmentation: yolo segment train model=yolo26n-seg.pt data=LabelMeJSON.yaml
+# Requires the custom LabelMeJSONDataset implementation.
+# parent
+# ├── ultralytics
+# └── datasets
+#     └── LabelMeJSON
+#         ├── images/train/ (each image has a same-stem JSON, e.g. sample.jpg and sample.json)
+#         └── images/val/ (validation images and their same-stem JSON annotations)
+#
+# Detection accepts rectangle or polygon annotations; do not mix them within one image.
+# Instance segmentation requires polygon annotations throughout the dataset.
+# Other shape types (including mask) are skipped; prepare fully annotated supported shapes before training.
+# Repeated non-null group_id values within an image are unsupported.
+# Prepare this local dataset manually; no automatic download is configured.
+
+# Train/val/test sets as 1) dir: path/to/imgs, 2) file: path/to/imgs.txt, or 3) list: [path/to/imgs1, path/to/imgs2, ..]
+format: LabelMeJSON # custom dataset format (detect and segment only)
+path: LabelMeJSON # dataset root dir
+train: images/train # train images (relative to 'path')
+val: images/val # val images (relative to 'path')
+test: # test images (optional)
+
+# Classes (replace with your dataset's unique labels)
+names:
+  - person
+  - cat
+  - dog

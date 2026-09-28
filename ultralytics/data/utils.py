@@ -6,6 +6,8 @@ import os
 import random
 import subprocess
 import time
+import json
+import warnings
 import zipfile
 from pathlib import Path
 from tarfile import is_tarfile
@@ -326,8 +328,15 @@ def verify_image_mask(args: tuple) -> tuple:
     return None, None, None, None, nm, nf, nc, msg
 
 
-def verify_image_label(args: tuple) -> list:
-    """Verify one image-label pair."""
+def verify_image_label(args: tuple, fmt: str = "YOLO", names: dict | None = None) -> list:
+    """Verify one image-label pair.
+    Args:
+        args: (im_file, lb_file, prefix, use_keypoints, num_cls, nkpt, ndim, single_cls)
+        fmt: dataset format: YOLO(default), LabelMeJSON, or the other custom fmt...
+        names: label to index(number label) mapping. example: {"some-label-0": 0, "some-label-1": 1}
+    Returns:
+        (im_file, lb, shape, segments, keypoints, nmiss, nfound, nempty, ncorrupt, msg)
+    """
     im_file, lb_file, prefix, keypoint, num_cls, nkpt, ndim, single_cls = args
     # Number (missing, found, empty, corrupt), message, segments, keypoints
     nm, nf, ne, nc, msg, segments, keypoints = 0, 0, 0, 0, "", [], None
@@ -340,11 +349,37 @@ def verify_image_label(args: tuple) -> list:
         if os.path.isfile(lb_file):
             nf = 1  # label found
             with open(lb_file, encoding="utf-8") as f:
-                lb = [x.split() for x in f.read().strip().splitlines() if len(x)]
+                if fmt == "YOLO":
+                    lb = [x.split() for x in f.read().strip().splitlines() if len(x)]
+                elif fmt == "LabelMeJSON":
+                    # TODO: maybe not enough compatibility for: obb, pose, world, support: detect, segment
+                    lb, group_ids = [], []
+                    for item in json.load(f)["shapes"]:
+                        # LabelMe shape_type support: rectangle, polygon, point, circle, line, linestrip, mask
+                        #   In previous versions, shape_type could be None, LabelMe will set it as polygon by default,
+                        #   but here would desperate it
+                        if item.get("shape_type") not in ("rectangle", "polygon"):
+                            continue
+                        if (label := names.get(item["label"])) is None:  # allowed label filter, warning for log
+                            warnings.warn(f"label <{item['label']}> not found in LabelMeJSON names")
+                            continue
+                        if (group_id := item.get("group_id")) is not None:
+                            assert group_id not in group_ids, "not support shapes has the same group_id"
+                            group_ids.append(group_id)
+                        points = [np.clip(v / s, 0, 1) for xy in item["points"] for v, s in zip(xy, shape[::-1])]
+                        if item.get("shape_type") == "rectangle":
+                            points = np.asarray(points).reshape(-1, 2)
+                            (x0, y0), (x1, y1) = points.min(axis=0), points.max(axis=0)
+                            points = [(x0 + x1) / 2, (y0 + y1) / 2, x1 - x0, y1 - y0]  # convert to (cx, cy, w, h)
+                            assert all(v > 0 for v in points[2:]), "LabelMeJSON exist width=0 or height=0 shape"
+                        lb.append([label] + points)
+                else:
+                    raise ValueError(f"label format <{fmt}> unsupported, from {lb_file}")
                 if any(len(x) > 6 for x in lb) and (not keypoint):  # is segment
                     assert not any(len(x) == 5 for x in lb), "labels mix segment and detection rows"
                     classes = np.array([x[0] for x in lb], dtype=np.float32)
                     segments = [np.array(x[1:], dtype=np.float32).reshape(-1, 2) for x in lb]  # (cls, xy1...)
+                    assert all(len(p) >= 3 and cv2.contourArea(p) > 0 for p in segments), "exist width=0 or height=0 segments"
                     lb = np.concatenate((classes.reshape(-1, 1), segments2boxes(segments)), 1)  # (cls, xywh)
                 lb = np.array(lb, dtype=np.float32)
             if nl := len(lb):
